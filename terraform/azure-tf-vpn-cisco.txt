@@ -1,0 +1,61 @@
+crypto ikev2 proposal ENCC-AZURE-IKE-PROPOSAL 
+ encryption aes-gcm-256
+ prf sha384
+ group 24
+!
+crypto ikev2 policy ENCC-AZURE-POLICY 
+ proposal ENCC-AZURE-IKE-PROPOSAL
+!
+crypto ikev2 keyring AZURE_S2S_VPN
+ peer <AZURE-PUBLIC-IP>_AZURE01
+  address <AZURE-PUBLIC-IP>
+  pre-shared-key local C1sco12345
+  pre-shared-key remote C1sco12345
+ !
+!
+crypto ikev2 profile ENCC-AZURE-IKE-PROFILE
+ match identity remote address <AZURE-PUBLIC-IP> 255.255.255.255 
+ identity local address <LOCAL-PUBLIC-IP>
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local AZURE_S2S_VPN
+ dpd 45 2 on-demand
+!
+crypto ikev2 fragmentation mtu 1200
+! 
+crypto keyring ENCC-AZURE-KEY01  
+  pre-shared-key address <AZURE-PUBLIC-IP> key C1sco12345
+!
+crypto ipsec transform-set ENCC-IPSEC-VPN esp-gcm 256 
+ mode transport
+!
+crypto ipsec profile ENCC-AZURE-IPSEC-PROFILE
+ set transform-set ENCC-IPSEC-VPN 
+ set pfs group20
+ set ikev2-profile ENCC-AZURE-IKE-PROFILE
+!
+!
+interface Tunnel1
+ description TO AZURE
+ ip address 192.168.150.1 255.255.255.252
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ tunnel source Gi1
+ tunnel mode ipsec ipv4
+ tunnel destination <AZURE-PUBLIC-IP>
+ tunnel protection ipsec profile ENCC-AZURE-IPSEC-PROFILE
+! 
+ip route 10.0.0.0 255.255.0.0 tunnel1
+! 
+router bgp 65000
+ bgp log-neighbor-changes
+ bgp graceful-restart
+ address-family ipv4 unicast
+  neighbor 10.0.1.254 remote-as 65515
+  neighbor 10.0.1.254 ebgp-multihop 255
+  neighbor 10.0.1.254 activate
+  network 192.168.150.0 mask 255.255.255.252
+  network <LOCAL-ONPREM-SUBNET> mask 255.255.255.0
+  no auto-summary
+  no synchronization
+ exit-address-family
